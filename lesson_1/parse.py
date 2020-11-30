@@ -1,4 +1,3 @@
-import os
 import json
 import requests
 from pathlib import Path
@@ -8,36 +7,13 @@ from time import sleep
 class Parser:
     _headers = {
         'User-Agent':
-        'Mozilla/5.0 (X11; Linux x86_64; rv:82.0) Gecko/20100101 Firefox/82.0',
+        'Mozilla/5.0 (X11; Linux x86_64; rv:82.0) Gecko/20100101 Firefox/82.0'
     }
+    _params = {}
+    _delays = {'get': .2}
 
-    _params = {
-        'records_per_page': 50,
-    }
-
-    def __init__(self,
-                 start_url: str,
-                 get_delay: float = .2,
-                 run_delay: float = .1,
-                 out_dir: str = None):
-        self.start_url: str = start_url
-        self.get_delay: float = get_delay
-        self.run_delay: float = run_delay
-        self.out_path: Path = Path(os.path.dirname(__file__))
-        if out_dir:
-            self.out_path = self.out_path.joinpath(out_dir)
-
-    def __str__(self):
-        return '\n'.join(
-            [
-                f'URL to begin: {self.start_url}',
-                f'get time delay: {self.get_delay}',
-                f'run time delay: {self.run_delay}',
-                f'path to save: {self.out_path}'
-            ]
-        )
-
-    def get(self, *args, **kwargs) -> requests.Response:
+    @staticmethod
+    def _get(*args, **kwargs) -> requests.Response:
         while True:
             try:
                 response: requests.Response = requests.get(*args, **kwargs)
@@ -50,39 +26,80 @@ class Parser:
                 if status_code_class == 4:
                     raise SystemExit(error)
                 else:
-                    sleep(self.get_delay)
-            # except requests.exceptions.ConnectionError as error:
-            #     SystemExit(error)
-            # except requests.exceptions.Timeout as error:
-            #     SystemExit(error)
-            # except requests.exceptions.TooManyRedirects as error:
-            #     SystemExit(error)
-            # except requests.exceptions.RequestException as error:
-            #     SystemExit(error)
+                    sleep(Parser._delays['get'])
             else:
                 return response
 
-    def parse(self, url: str):
-        params: dict = self._params
+    @staticmethod
+    def _save_to_file(data, path: Path):
+        with open(path, 'w', encoding='utf-8') as file:
+            # json_data = json.dumps(data, ensure_ascii=False)
+            # file.write(json_data)
+            json.dump(data, file, ensure_ascii=False)
+
+
+class ProductParser(Parser):
+    _params = {'records_per_page': 50}
+    _delays = {'get': .2, 'run': .1}
+
+    def __init__(self, start_url: str, path_to_save: Path):
+        self.urls = {'start': start_url}
+        self.paths = {'save': path_to_save}
+
+    def _full_path(self, file_name) -> Path:
+        return self.paths['save'].joinpath(f'{file_name}.json')
+
+    @staticmethod
+    def parse(url: str):
+        params: dict = ProductParser._params
         while url:
-            response: requests.Response = \
-                self.get(url, params=params, headers=self._headers)
+            response: requests.Response = ProductParser._get(
+                url,
+                headers=ProductParser._headers,
+                params=params
+            )
             if params:
                 params = {}
             # data: dict = json.loads(response.text)
             data: dict = response.json()
-            url: str = data.get('next')
-            yield data.get('results')
-
-    def save_to_file(self, product):
-        path = self.out_path.joinpath(f"{product.get('id')}.json")
-        with open(path, 'w', encoding='utf-8') as file:
-            # j_data = json.dumps(product, ensure_ascii=False)
-            # file.write(j_data)
-            json.dump(product, file, ensure_ascii=False)
+            url: str = data['next']
+            yield data['results']
 
     def run(self):
-        for products in self.parse(self.start_url):
+        for products in self.parse(self.urls['start']):
             for product in products:
-                self.save_to_file(product)
-            sleep(self.run_delay)
+                self._save_to_file(product, self._full_path(product['id']))
+            sleep(self._delays['run'])
+
+
+class CatalogParser(ProductParser):
+    def __init__(self,
+                 start_url: str, catalog_url: str,
+                 path_to_save: Path):
+        super().__init__(start_url, path_to_save)
+        self.urls['catalog'] = catalog_url
+
+    @property
+    def categories(self):
+        response: requests.Response = self._get(self.urls['catalog'],
+                                                params=self._params,
+                                                headers=self._headers)
+        return response.json()
+
+    def run(self):
+        for category in self.categories:
+            data = {
+                'code': category['parent_group_code'],
+                'name': category['parent_group_name'],
+                'products': []
+            }
+
+            self._params['categories'] = category['parent_group_code']
+
+            for products in self.parse(self.urls['start']):
+                data['products'].extend(products)
+
+            self._save_to_file(data,
+                               self._full_path(category['parent_group_code']))
+
+            sleep(self._delays['run'])
