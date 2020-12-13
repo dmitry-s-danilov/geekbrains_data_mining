@@ -2,6 +2,7 @@ import os
 import scrapy
 import pymongo
 import dotenv
+import re
 
 dotenv.load_dotenv('../../.env')
 
@@ -11,7 +12,20 @@ class AutoyoulaSpider(scrapy.Spider):
     allowed_domains = ['auto.youla.ru']
     start_urls = ['https://auto.youla.ru/']
 
-    css_queries = {
+    user_id_script_inclusion = 'window.transitState = decodeURIComponent'
+    user_id_script_regex = re.compile(
+        r'youlaId%22%2C%22([0-9|a-zA-Z]+)%22%2C%22avatar'
+    )
+    user_url_prefix = 'https://youla.ru/user/'
+
+    def get_user_id(self, script):
+        result = re.findall(self.user_id_script_regex, script)
+        return result[0] if result else None
+
+    def get_user_url(self, user_id):
+        return f'{self.user_url_prefix}{user_id}' if user_id else None
+
+    queries = {
         'brands': ' '.join(
             (
                 # 'div.TransportMainFilters_brandsList__2tIkv',
@@ -64,7 +78,26 @@ class AutoyoulaSpider(scrapy.Spider):
                 )
             ),
 
-            'images': ' '.join(
+            'specification': {
+                'rows': ' '.join(
+                    (
+                        # 'div.AdvertCard_pageContent__24SCy.app_pageBlock__19Uub.app_roundedBlockWithShadow__1rh6w',
+                        # 'div.AdvertCard_info__3IKjT AdvertCard_advertBlock__1zrsL',
+                        'div.AdvertCard_specs__2FEHc',
+                        'div.AdvertSpecs_row__ljPcX'
+                    )
+                ),
+                'label': 'div.AdvertSpecs_label__2JHnS::text',
+                'data': [
+                    'div.AdvertSpecs_data__xK2Qx::text',
+                    'div.AdvertSpecs_data__xK2Qx a.blackLink::text'
+                ]
+            },
+
+            'user_id_script':
+                f'script:contains("{user_id_script_inclusion}")::text',
+
+            'image_urls': ' '.join(
                 (
                     # 'div.AdvertCard_pageContent__24SCy.app_pageBlock__19Uub.app_roundedBlockWithShadow__1rh6w',
                     # 'div.AdvertCard_info__3IKjT.AdvertCard_advertBlock__1zrsL',
@@ -79,6 +112,38 @@ class AutoyoulaSpider(scrapy.Spider):
         }
     }
 
+    def get_advert_data(self, response):
+        queries = AutoyoulaSpider.queries['advert']
+        template = {
+            'title':
+                # response.css(css_query['title'].extract()[0],
+                response.css(queries['title']).get(),
+
+            'description':
+                response.css(queries['description']).get(),
+
+            'specification': {
+                row.css(queries['specification']['label']).get():
+                    row.css(queries['specification']['data'][0]).get() or
+                    row.css(queries['specification']['data'][1]).get()
+                for row in
+                response.css(queries['specification']['rows'])
+            },
+
+            'advert_url': response.url,
+
+            'user_url':
+                self.get_user_url(
+                    self.get_user_id(
+                        response.css(queries['user_id_script']).get()
+                    )
+                ),
+
+            'image_urls':
+                [_.attrib['src'] for _ in response.css(queries['image_urls'])],
+        }
+        return template
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -87,50 +152,20 @@ class AutoyoulaSpider(scrapy.Spider):
                 os.getenv('DATABASE')
             )['data_mining'][self.name]
 
-    @property
-    def advert_template(self):
-        queries = self.css_queries['advert']
-        template = {
-            'title':
-                lambda response:
-                # response.css(css_query['title'].extract()[0],
-                response.css(queries['title']).get(),
-
-            'description':
-                lambda response:
-                response.css(queries['description']).get(),
-
-            # 'specification': lambda response: '',
-
-            'images':
-                lambda response:
-                [_.attrib['src'] for _ in response.css(queries['images'])],
-
-            # 'author': lambda response: '',
-
-            # 'url': lambda response: '',
-        }
-        return template
-
     def parse(self, response, **kwargs):
-        for _ in response.css(self.css_queries['brands']):
+        for _ in response.css(self.queries['brands']):
             yield response.follow(_.attrib['href'],
-                                  callback=self.adverts_parse)
+                                  callback=self.parse_adverts)
 
-    def adverts_parse(self, response):
-        for _ in response.css(self.css_queries['adverts_pagination']):
+    def parse_adverts(self, response):
+        for _ in response.css(self.queries['adverts_pagination']):
             yield response.follow(_.attrib['href'],
-                                  callback=self.adverts_parse)
+                                  callback=self.parse_adverts)
 
-        for _ in response.css(self.css_queries['adverts']):
+        for _ in response.css(self.queries['adverts']):
             yield response.follow(_.attrib['href'],
-                                  callback=self.advert_parse)
+                                  callback=self.parse_advert)
 
-    def advert_parse(self, response):
-        data = {
-            key: value(response)
-            for key, value in
-            self.advert_template.items()
-        }
-
+    def parse_advert(self, response):
+        data = self.get_advert_data(response)
         self.collection.insert_one(data)
