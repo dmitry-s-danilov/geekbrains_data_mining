@@ -1,7 +1,3 @@
-""""
-Crawl process start point.
-"""
-
 from scrapy.settings import Settings
 from scrapy.crawler import CrawlerProcess
 from parse.spiders.autoyoula import AutoyoulaSpider
