@@ -1,6 +1,6 @@
 from scrapy.settings import Settings
 from scrapy.crawler import CrawlerProcess
-from parse.spiders.autoyoula import AutoyoulaSpider
+from parse.spiders.autoyoula_css import AutoYoulaSpider
 from dotenv import load_dotenv
 
 load_dotenv('.env')
@@ -10,6 +10,6 @@ if __name__ == '__main__':
     settings.setmodule('parse.settings')
 
     process = CrawlerProcess(settings=settings)
-    process.crawl(AutoyoulaSpider)
+    process.crawl(AutoYoulaSpider)
 
     process.start()

@@ -1,6 +1,6 @@
-import re
+from re import findall
 
 
-def decoder(pattern, string):
-    matches = re.findall(pattern=pattern, string=string)
+def find(pattern, string):
+    matches = findall(pattern=pattern, string=string)
     return matches[0] if matches else None
