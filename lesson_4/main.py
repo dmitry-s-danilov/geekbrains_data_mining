@@ -1,6 +1,6 @@
 from scrapy.settings import Settings
 from scrapy.crawler import CrawlerProcess
-from parse.spiders.autoyoula_css import AutoYoulaSpider
+from parse.spiders.autoyoula import AutoYoulaSpider
 from dotenv import load_dotenv
 
 load_dotenv('.env')

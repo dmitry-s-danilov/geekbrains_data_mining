@@ -1,5 +1,6 @@
 import scrapy
-from parse.lib.autoyoula_css import crawl_template, item_template
+# from parse.lib.autoyoula_css import crawl_template, item_template
+from parse.lib.autoyoula_xpath import crawl_template, item_template
 
 
 class AutoYoulaSpider(scrapy.Spider):
