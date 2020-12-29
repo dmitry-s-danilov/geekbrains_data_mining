@@ -1,22 +1,27 @@
-# Урок 2. Парсинг HTML. BeautifulSoup. MongoDB
+# Урок 2. Парсинг HTML с помощью BeautifulSoup. Система управления базами данных MongoDB в Python
 
 ## Практическое задание
 
-### Постановка задачи
+Собрать данные о товарах по акции и
+сохранить их в коллекцию базы данных системы *MongoDB*.
 
-- Источник: https://magnit.ru/promo/?geo=moskva
-- Необходимо собрать структуры товаров по акции
-и сохранить их в MongoDB
-- Пример структуры (обязательно хранить поля даты как объекты datetime):
-```
-{
-    "url": str,
-    "promo_name": str,
-    "product_name": str,
-    "old_price": float,
-    "new_price": float,
-    "image_url": str,
-    "date_from": "DATETIME",
-    "date_to": "DATETIME",
-}
-```
+- Источник данных: https://magnit.ru/promo/?geo=moskva
+
+- Даты должны быть сохранены как объекты `datetime`.
+
+- Описание структуры данных одного товара,
+  соответствующей отдельной записи
+  в коллекции базы данных системы *MongoDB*.
+
+  ```
+  {
+      'url': str,
+      'promo_name': str,
+      'product_name': str,
+      'old_price': float,
+      'new_price': float,
+      'image_url': str,
+      'date_from': datetime,
+      'date_to': datetime,
+  }
+  ```
